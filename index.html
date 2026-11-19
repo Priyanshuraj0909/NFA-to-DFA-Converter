@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NFA → DFA Converter</title>
+  <meta name="description" content="Interactive subset-construction simulator: convert an ε-NFA to a DFA step by step, visualise both automata, simulate strings and validate the result." />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">⇉</span>
+      <div>
+        <h1>NFA → DFA Converter</h1>
+        <p>Subset-construction simulator · CSET302 Automata Theory &amp; Computability</p>
+      </div>
+    </div>
+    <button id="themeToggle" class="btn ghost" type="button" title="Toggle light/dark theme">◐ Theme</button>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="define" role="tab">1 · Define NFA</button>
+    <button class="tab" data-tab="steps" role="tab">2 · Conversion Steps</button>
+    <button class="tab" data-tab="result" role="tab">3 · DFA Result</button>
+    <button class="tab" data-tab="simulate" role="tab">4 · Simulate String</button>
+    <button class="tab" data-tab="validate" role="tab">5 · Validate</button>
+  </nav>
+
+  <main>
+    <!-- ============================================================ DEFINE -->
+    <section id="tab-define" class="panel active">
+      <div class="grid two">
+        <div class="stack">
+          <div class="card">
+            <h2>Load an example</h2>
+            <div class="row">
+              <select id="presetSelect"></select>
+              <button id="loadPreset" class="btn" type="button">Load</button>
+              <button id="clearAll" class="btn ghost" type="button">Start blank</button>
+            </div>
+            <p id="presetDesc" class="muted small"></p>
+          </div>
+
+          <div class="card">
+            <h2>Formal definition &nbsp;<span class="muted">N = (Q, Σ, δ, q₀, F)</span></h2>
+            <div class="form">
+              <label>Q — states <input id="inStates" placeholder="q0, q1, q2" spellcheck="false" /></label>
+              <label>Σ — input alphabet <input id="inAlphabet" placeholder="a, b" spellcheck="false" /></label>
+              <label>q₀ — start state <input id="inStart" placeholder="q0" spellcheck="false" /></label>
+              <label>F — final states <input id="inFinals" placeholder="q2" spellcheck="false" /></label>
+            </div>
+            <p class="muted small">Separate names with commas or spaces. ε (also <code>eps</code>, <code>λ</code>) is reserved for empty moves.</p>
+          </div>
+
+          <div class="card">
+            <h2>Transition function δ</h2>
+            <p class="muted small">Each cell is δ(state, symbol): a comma-separated set of target states. Leave empty for ∅. → marks the start state, * marks final states.</p>
+            <div class="table-wrap"><table id="deltaTable" class="table delta"></table></div>
+          </div>
+
+          <div class="card">
+            <h2>Import / export (JSON)</h2>
+            <textarea id="jsonBox" rows="7" spellcheck="false" placeholder='{"states":["q0","q1"],"alphabet":["a"],"start":"q0","finals":["q1"],"transitions":{"q0":{"a":["q1"]}}}'></textarea>
+            <div class="row">
+              <button id="exportJson" class="btn ghost" type="button">Export current NFA</button>
+              <button id="importJson" class="btn ghost" type="button">Import JSON</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="stack sticky">
+          <div class="card">
+            <div class="card-head">
+              <h2>NFA state diagram</h2>
+              <span class="muted small">drag states to rearrange</span>
+            </div>
+            <svg id="nfaPreview" class="graph-box"></svg>
+          </div>
+          <div id="defineMessages" class="messages"></div>
+          <div class="card">
+            <label class="check"><input type="checkbox" id="optDead" checked /> Include the dead (trap) state ∅ so the DFA is complete</label>
+            <button id="convertBtn" class="btn primary big" type="button">Convert to DFA →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ STEPS -->
+    <section id="tab-steps" class="panel">
+      <div class="needs-conversion"></div>
+      <div class="conv-only">
+        <div class="card controls">
+          <div class="row">
+            <button class="btn ghost" data-step="first" title="First step">⏮</button>
+            <button class="btn ghost" data-step="prev" title="Previous step">◀</button>
+            <button class="btn primary" id="playSteps" title="Play / pause">▶ Play</button>
+            <button class="btn ghost" data-step="next" title="Next step">▶</button>
+            <button class="btn ghost" data-step="last" title="Last step">⏭</button>
+            <span id="stepCounter" class="pill"></span>
+            <label class="small muted speed">speed <input type="range" id="stepSpeed" min="200" max="2500" step="100" value="1100" /></label>
+          </div>
+          <input type="range" id="stepSlider" min="0" value="0" class="slider" />
+        </div>
+
+        <div class="card explain" id="stepExplain"></div>
+
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head"><h2>NFA</h2><span class="legend"><i class="sw src"></i>current subset T <i class="sw hl"></i>result U</span></div>
+            <svg id="stepNfa" class="graph-box"></svg>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>DFA under construction</h2><span class="legend"><i class="sw hl"></i>new / active</span></div>
+            <svg id="stepDfa" class="graph-box"></svg>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Subset table (Dstates / Dtran)</h2>
+          <div class="table-wrap"><table id="subsetTable" class="table"></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ RESULT -->
+    <section id="tab-result" class="panel">
+      <div class="needs-conversion"></div>
+      <div class="conv-only">
+        <div class="stats" id="resultStats"></div>
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head">
+              <h2>DFA state diagram</h2>
+              <div class="row tight">
+                <button id="dlDfaSvg" class="btn ghost small" type="button">⬇ SVG</button>
+                <button id="dlDfaJson" class="btn ghost small" type="button">⬇ JSON</button>
+              </div>
+            </div>
+            <svg id="dfaGraph" class="graph-box tall"></svg>
+          </div>
+          <div class="card">
+            <h2>DFA transition table</h2>
+            <p class="muted small">→ start · * accepting · each DFA state stands for a set of NFA states.</p>
+            <div class="table-wrap"><table id="dfaTable" class="table"></table></div>
+            <h3>Formal definition</h3>
+            <pre id="dfaFormal" class="formal"></pre>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Extension: minimise the DFA (Moore's partition refinement)</h2>
+            <button id="minimizeBtn" class="btn" type="button">Minimise DFA</button>
+          </div>
+          <div id="minOut" class="hidden">
+            <div id="minSummary" class="explain"></div>
+            <div class="grid two">
+              <div>
+                <h3>Partition refinement</h3>
+                <div class="table-wrap"><table id="minRounds" class="table"></table></div>
+                <h3>Minimal DFA table</h3>
+                <div class="table-wrap"><table id="minTable" class="table"></table></div>
+              </div>
+              <div>
+                <svg id="minGraph" class="graph-box"></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ SIMULATE -->
+    <section id="tab-simulate" class="panel">
+      <div class="needs-conversion"></div>
+      <div class="conv-only">
+        <div class="card">
+          <h2>Run a string on both automata</h2>
+          <div class="row">
+            <input id="simInput" class="grow mono" placeholder="e.g. abb   (leave empty or type ε for the empty string)" spellcheck="false" />
+            <button id="simRun" class="btn primary" type="button">Run</button>
+          </div>
+          <div class="row">
+            <button class="btn ghost" data-sim="first">⏮</button>
+            <button class="btn ghost" data-sim="prev">◀</button>
+            <button class="btn ghost" id="simPlay">▶ Play</button>
+            <button class="btn ghost" data-sim="next">▶</button>
+            <button class="btn ghost" data-sim="last">⏭</button>
+            <div id="simTape" class="tape"></div>
+          </div>
+          <div id="simVerdict" class="messages"></div>
+        </div>
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head"><h2>NFA — set of active states</h2></div>
+            <svg id="simNfa" class="graph-box"></svg>
+            <div class="table-wrap"><table id="simNfaTrace" class="table"></table></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>DFA — single active state</h2></div>
+            <svg id="simDfa" class="graph-box"></svg>
+            <div class="table-wrap"><table id="simDfaTrace" class="table"></table></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ VALIDATE -->
+    <section id="tab-validate" class="panel">
+      <div class="needs-conversion"></div>
+      <div class="conv-only">
+        <div class="card">
+          <div class="card-head">
+            <h2>Test cases — expected vs generated</h2>
+            <div class="row tight">
+              <button id="tcPreset" class="btn ghost small" type="button">Load example's tests</button>
+              <button id="tcAdd" class="btn ghost small" type="button">+ Add test</button>
+              <button id="tcRun" class="btn primary" type="button">Run all tests</button>
+            </div>
+          </div>
+          <p class="muted small">Enter a string and the result you expect from the language. The simulator compares it with the NFA, the generated DFA and (if computed) the minimal DFA.</p>
+          <div class="table-wrap"><table id="tcTable" class="table"></table></div>
+          <div id="tcSummary" class="messages"></div>
+        </div>
+
+        <div class="grid two">
+          <div class="card">
+            <h2>Exhaustive check</h2>
+            <p class="muted small">Runs <em>every</em> string over Σ up to the given length on the NFA and on the DFA and reports any disagreement.</p>
+            <div class="row">
+              <label class="small">max length <input id="exLen" type="number" min="0" max="20" value="8" class="num" /></label>
+              <button id="exRun" class="btn" type="button">Run exhaustive check</button>
+            </div>
+            <div id="exOut" class="messages"></div>
+          </div>
+          <div class="card">
+            <h2>Exact equivalence proof</h2>
+            <p class="muted small">Breadth-first search over all reachable pairs (NFA state-set, DFA state). L(NFA) = L(DFA) iff no reachable pair disagrees on acceptance; otherwise the shortest counterexample is shown.</p>
+            <button id="eqRun" class="btn" type="button">Check L(NFA) = L(DFA)</button>
+            <div id="eqOut" class="messages"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot muted small">
+    Pure HTML/CSS/JavaScript — runs offline, no installation. Core algorithms: <code>js/automata.js</code> · tests: <code>node tests/run-tests.js</code>
+  </footer>
+
+  <script src="js/automata.js"></script>
+  <script src="js/presets.js"></script>
+  <script src="js/graph.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
