@@ -1,0 +1,11 @@
+{
+  "name": "nfa-to-dfa-converter",
+  "version": "1.0.0",
+  "description": "Interactive NFA to DFA subset-construction simulator (CSET302 Automata Theory)",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run-tests.js",
+    "report": "node tests/generate-test-report.js"
+  },
+  "license": "MIT"
+}
